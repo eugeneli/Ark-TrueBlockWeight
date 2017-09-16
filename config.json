@@ -1,0 +1,9 @@
+{
+    "user": "ark",
+    "host": "localhost",
+    "database": "ark_mainnet",
+    "password": "password",
+    "port": 5432,
+    "publicKey": "Public key (bytes)",
+    "pKey": "Public key (string)"
+}

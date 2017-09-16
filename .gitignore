@@ -1,0 +1,5 @@
+  GNU nano 2.5.3              File: .gitignore                                  
+
+node_modules
+logs
+*.log
