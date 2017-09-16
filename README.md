@@ -96,7 +96,7 @@ var blockShareFunc = (poolSize, voterBalance) => {
 ## Authors
 
 * **George Kushnir** - [n4ru](https://github.com/n4ru)
-* **Eugene Li** - [eugeneli](https://github.com)
+* **Eugene Li** - [eugeneli](https://github.com/eugeneli)
 
 See also the list of [contributors](https://github.com/eugeneli/Ark-TrueBlockWeight/graphs/contributors) who participated in this project.
 
