@@ -74,18 +74,18 @@ var blockShareFunc = (poolSize, voterBalance) => {
     var poolSize = new BigNumber(poolSize);     //Total pool size
     var balance = new BigNumber(voterBalance);  //Balance of voter at each block
     
-    var pay = forgedBalance.times(balance).dividedBy(poolSize);
-    var tax;
+    var fullPay = forgedBalance.times(balance).dividedBy(poolSize);
+    var pay, tax;
     var whaleLimit = 100000 * 100000000;        //Convert to Arktoshis
-    if(balance.lessThanwhaleLimit))
+    if(balance.lessThan(whaleLimit))
     {
-        pay = pay.times(0.9);
-        tax = pay.times(0.1);
+        pay = fullPay.times(0.9);
+        tax = fullPay.times(0.1);
     }
     else
     {
-        pay = pay.times(0.5);
-        tax = pay.times(0.5);
+        pay = fullPay.times(0.5);
+        tax = fullPay.times(0.5);
     }
 
     //Return an array of two BigNumber.js objects, [voter's share, delegate's cut]
