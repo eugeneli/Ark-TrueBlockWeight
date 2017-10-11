@@ -23,7 +23,7 @@ If your pay script and node are not on the same server, you will need to configu
 ### Installation and Usage
 First, remember to configure your node's database as mentioned above and insert your credentials in ```config.json```
 1) Clone this repository
-2) cd Ark-TrueBlockWeight
+2) ```cd Ark-TrueBlockWeight```
 3) ```npm install```
 
 #### Command line usage:
@@ -37,7 +37,7 @@ var TBW = require("../true_block_weight/main");
 var options = {
     blacklist: {"someArkAddress": true, "otherArkAddress": true ...},
     numBlocks: 422, //Defaults to 211 if left empty
-    blockShareFunc = (poolSize, voterBalanceAtblock) => { ... } //Function to be run on when calculating each voter's share per block (Leave empty for 100% payouts, see examples below)
+    blockShareFunc = (poolSize, voterBalanceAtblock) => { ... } //Function to be run when calculating each voter's share per block (Leave empty for 100% payouts, see examples below)
 };
 TBW.getPayouts(options).then((payData) => {
     console.log(payData);
@@ -52,10 +52,51 @@ var payData = {
 };
 ```
 
+### Example block share functions
+Pay 100% of forged blocks (default if ```options.blockShareFunc``` is empty)
+```
+var blockShareFunc = (poolSize, voterBalance) => {
+    var forgedBalance = new BigNumber(2);       //Block reward
+    var poolSize = new BigNumber(poolSize);     //Total pool size
+    var balance = new BigNumber(voterBalance);  //Balance of voter at each block
+
+    var fullPay = forgedBalance.times(balance).dividedBy(poolSize); //This voter's share of the 2 Ark block reward
+
+    //Return an array of two BigNumber.js objects, [voter's share, delegate's cut]
+    return [fullPay, new BigNumber(0)]; 
+};
+```
+
+Pay 90% of forged block rewards if the voter's balance is less than 100,000 Ark and 50% if the voter's balance is over 100,000 Ark
+```
+var blockShareFunc = (poolSize, voterBalance) => {
+    var forgedBalance = new BigNumber(2);       //Block reward
+    var poolSize = new BigNumber(poolSize);     //Total pool size
+    var balance = new BigNumber(voterBalance);  //Balance of voter at each block
+    
+    var fullPay = forgedBalance.times(balance).dividedBy(poolSize);
+    var pay, tax;
+    var whaleLimit = 100000 * 100000000;        //Convert to Arktoshis
+    if(balance.lessThan(whaleLimit))
+    {
+        pay = fullPay.times(0.9);
+        tax = fullPay.times(0.1);
+    }
+    else
+    {
+        pay = fullPay.times(0.5);
+        tax = fullPay.times(0.5);
+    }
+
+    //Return an array of two BigNumber.js objects, [voter's share, delegate's cut]
+    return [pay, tax]; 
+};
+```
+
 ## Authors
 
 * **George Kushnir** - [n4ru](https://github.com/n4ru)
-* **Eugene Li** - [eugeneli](https://github.com)
+* **Eugene Li** - [eugeneli](https://github.com/eugeneli)
 
 See also the list of [contributors](https://github.com/eugeneli/Ark-TrueBlockWeight/graphs/contributors) who participated in this project.
 
