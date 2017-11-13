@@ -8,17 +8,19 @@ You will need to be running a [full node](https://github.com/ArkEcosystem/ark-no
 Then modify ```config.json``` with your Ark Node's Postgresql database credentials and your delegate's public key.
 ```
 {
-    "user": "ark",
+    "user": "tbw",
     "host": "localhost",
     "database": "ark_mainnet",
-    "password": "password",
+    "password": "tbw",
     "port": 5432,
-    "publicKey": "Public key (bytes)",
-    "pKey": "Public key (string)"
+    "delegate": "Delegate Name"
 }
 ```
 
 If your pay script and node are not on the same server, you will need to configure the node's Postgresql database for external access.
+
+##### Public Node
+biz_classic offers a publicly accessible read-only ARK database for use with the True Block Weight script for delegates. Please reach out to one of us (either goldenpepe or moonman) on the ARK slack if you are a delegate who wishes to use the public node for your configuration.
 
 ### Installation and Usage
 First, remember to configure your node's database as mentioned above and insert your credentials in ```config.json```

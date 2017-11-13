@@ -1,4 +1,6 @@
-const { Client } = require('pg');
+const {
+    Client
+} = require('pg');
 const config = require('./config.json');
 
 const BLOCK_REWARD = 200000000;
@@ -21,11 +23,45 @@ var QueryStream = require('pg-query-stream'),
     voterBlockShares = new Map(),
     client = new Client(NODE_CREDS);
 
-BigNumber.config({ DECIMAL_PLACES: 8, ERRORS: false });
+BigNumber.config({
+    DECIMAL_PLACES: 8,
+    ERRORS: false
+});
 queries.init(config.publicKey, config.pKey);
 
 var blacklist;
 var numBlocks;
+
+function getOctal(s) {
+    s = s.replace(/^ +| +$/g, '');
+
+    var n;
+    var matches = s.match(/^([-+]?[0-9a-f]*)(\.[0-9a-f]*)?$/i);
+    if (!matches /*/^[-+]?\w*(\.\w*)?$/.test(s) */ ) {
+        n = NaN;
+    } else if (!matches[2] || matches[2].length < 2) {
+        n = parseInt('0' + matches[1], 16);
+    } else {
+        n = parseInt('0' + matches[1], 16);
+        n += (matches[1].subString(0, 1) == '-' ? -1 : +1) * parseInt(matches[2].subString(1), 16) / Math.pow(16, matches[2].length - 1);
+    }
+    // FIXME: check for invalid characters, that are silently ignored by parseInt()
+    var output;
+    if (isNaN(n)) {
+        output = '';
+    } else if (16.25.toString(8) == '10.4') {
+        // Opera 9 does not support toString() for floats with base != 10
+        output = n.toString(8);
+    } else {
+        output = (n > 0 ? Math.floor(n) : Math.ceil(n)).toString(8);
+        if (n % 1) {
+            output += '.' + Math.round((Math.abs(n) % 1) * Math.pow(8, 8)).toString(8);
+            output = output.replace(/0+$/, '');
+        }
+    }
+    return (output)
+}
+
 var blockShareFunc = (poolSize, voterBalance) => {
     var forgedBalance = new BigNumber(BLOCK_REWARD);
     var poolSize = new BigNumber(poolSize);
@@ -60,6 +96,30 @@ var close = (taxes) => {
     })
 };
 
+var getKey = () => {
+    return new Promise((resolve, reject) => {
+        var keysQuery = queries.getKeys(config.delegate);
+        client.query(keysQuery, (err, res) => {
+            if (typeof res == "undefined")
+                reject("Error querying node db for generated blocks");
+            config.pKey = JSON.parse(res.rows[0].rawasset)['delegate']['publicKey'];
+            var pKey = config.pKey;
+            config.publicKey = "";
+            for (var i = 0; i < pKey.length; i++) {
+                chunk = pKey[i] + pKey[i + 1];
+                thisChunk = getOctal(chunk);
+                while (thisChunk.length < 3) {
+                    thisChunk = "0" + thisChunk;
+                }
+                config.publicKey = config.publicKey + "\\" + thisChunk;
+                i++;
+            }
+            queries.init(config.publicKey, config.pKey);
+            resolve();
+        })
+    })
+};
+
 var getBlocks = () => {
     return new Promise((resolve, reject) => {
         // Get all our forged blocks
@@ -89,17 +149,17 @@ var getVoters = () => {
     return new Promise((resolve, reject) => {
         var votersQuery = queries.getVoters(latestForgedBlock.timestamp);
         client.query(votersQuery, (err, res) => {
-            if(typeof res == "undefined")
+            if (typeof res == "undefined")
                 reject("Error querying node db for voters");
 
             votes = res.rows.map((row) => {
-                                return {
-                                    'voter': row.senderId,
-                                    'height': row.height,
-                                    'timestamp': row.timestamp,
-                                    'balances': {}
-                                };
-                            });
+                return {
+                    'voter': row.senderId,
+                    'height': row.height,
+                    'timestamp': row.timestamp,
+                    'balances': {}
+                };
+            });
 
             console.log(`Historical voters retrieved (${votes.length})`);
             resolve();
@@ -173,6 +233,9 @@ var handleData = (taxes) => {
         Object.keys(payouts).forEach((key) => totalPayouts = totalPayouts.plus(payouts[key]));
         console.log("Total paid out: " + totalPayouts.dividedBy(100000000).toString());
         console.log("True block weight complete");
+        if (config.user == "tbw" && config.password == "tbw")
+            console.log("You appear to be using the public TBW node. \nPlease consider donating to AKdr5d9AMEnsKYxpDcoHdyyjSCKVx3r9Nj so we can continue to provide this service publicly.")
+
 
         var payData = {
             taxes: taxes,
@@ -189,7 +252,7 @@ var getPoolBalances = () => {
         var fullBalanceQuery = queries.getTransactions(voterAddrs);
 
         client.query(fullBalanceQuery, (err, res) => {
-            if(typeof res == "undefined")
+            if (typeof res == "undefined")
                 rej("Error querying node db for full balances");
 
             var allVotersEver = new Set(voterAddrs);
@@ -300,6 +363,7 @@ exports.getPayouts = (options) => {
     console.log(`Calculating true block weight for ${numBlocks} forged blocks`);
 
     return connect()
+        .then(getKey)
         .then(getBlocks)
         .then(getVoters)
         .then(getPoolBalances)

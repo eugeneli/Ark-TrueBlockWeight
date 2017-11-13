@@ -37,3 +37,10 @@ exports.getTransactions = (addrs) => {
 
     return query;
 };
+
+exports.getKeys = (delegate) => {
+    return `SELECT transactions."rawasset" \
+            from transactions \ 
+            WHERE id IN (SELECT delegates."transactionId" FROM delegates WHERE delegates."username" = '${delegate}') \
+            LIMIT 1;`;
+}
