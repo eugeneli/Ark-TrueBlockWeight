@@ -1,4 +1,6 @@
-<img align="center" src="tbw.png">
+<p align="center">
+  <img align="center" src="tbw.png">
+</p>
 
 # Ark-TrueBlockWeight
 
