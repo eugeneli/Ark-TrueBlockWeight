@@ -1,4 +1,4 @@
-![True Block Weight](tbw.png)
+<img align="center" src="tbw.png">
 
 # Ark-TrueBlockWeight
 
