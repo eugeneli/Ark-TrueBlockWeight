@@ -1,9 +1,8 @@
 {
-    "user": "ark",
+    "user": "tbw",
     "host": "localhost",
     "database": "ark_mainnet",
-    "password": "password",
+    "password": "tbw",
     "port": 5432,
-    "publicKey": "Public key (bytes)",
-    "pKey": "Public key (string)"
+    "delegate": "delegate_name"
 }
