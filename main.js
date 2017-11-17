@@ -134,7 +134,7 @@ var getBlocks = () => {
                     'fees': row.totalFee,
                     'poolBalance': 0
                 };
-            }).sort((a, b) => a.timestamp - b.timestamp);
+            }).sort((a, b) => a.height - b.height);
 
             latestForgedBlock = sortedForgedBlocks[sortedForgedBlocks.length - 1];
 
@@ -266,7 +266,7 @@ var getPoolBalances = () => {
             var totalBalanceThusFar = new Map();
             var currentVoters = new Set();
 
-            var txs = res.rows.sort((a, b) => a.timestamp - b.timestamp); //sort ascending
+            var txs = res.rows.sort((a, b) => a.height - b.height); //sort ascending
 
             var voteUpdate = (tx, addr) => {
                 if (tx.rawasset.includes(`+${config.pKey}`)) //If just voted now
@@ -276,7 +276,7 @@ var getPoolBalances = () => {
                     contributionThusFar.set(addr, runningTotal);
 
                     sortedForgedBlocks.forEach((block) => {
-                        if (block.timestamp > tx.timestamp) {
+                        if (block.height > tx.height) {
                             block.voterBalances.set(addr, [runningTotal, 0]);
                         }
                     });
@@ -285,7 +285,7 @@ var getPoolBalances = () => {
                 {
                     currentVoters.delete(addr);
                     sortedForgedBlocks.forEach((block) => {
-                        if (block.timestamp > tx.timestamp) {
+                        if (block.height > tx.height) {
                             block.voterBalances.set(addr, [0, 0]);
                         }
                     });
@@ -307,7 +307,7 @@ var getPoolBalances = () => {
 
                         contributionThusFar.set(tx.recipientId, thusFar + amount);
                         sortedForgedBlocks.forEach((block) => {
-                            if (block.timestamp > tx.timestamp) {
+                            if (block.height > tx.height) {
                                 block.voterBalances.set(tx.recipientId, [thusFar + amount, 0]);
                             }
                         });
@@ -328,7 +328,7 @@ var getPoolBalances = () => {
                         totalBalanceThusFar.set(tx.senderId, thusFar - amount); //Keep track of their balance no matter what
                         contributionThusFar.set(tx.senderId, thusFar - amount);
                         sortedForgedBlocks.forEach((block) => {
-                            if (block.timestamp > tx.timestamp) {
+                            if (block.height > tx.height) {
                                 block.voterBalances.set(tx.senderId, [thusFar - amount, 0]);
                             }
                         });

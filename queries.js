@@ -30,7 +30,7 @@ exports.getVoters = (timestamp) => {
 exports.getTransactions = (addrs) => {
     var joinedAddrs = addrs.map((addr) => `'${addr}'`).join(",");
     
-    var query = 'SELECT transactions."id", transactions."amount", transactions."timestamp", transactions."recipientId", transactions."senderId", transactions."fee", transactions."rawasset" FROM transactions WHERE transactions."senderId" IN (';
+    var query = 'SELECT transactions."id", transactions."amount", transactions."timestamp", transactions."recipientId", transactions."senderId", transactions."fee", transactions."rawasset", blocks."height" FROM transactions INNER JOIN blocks ON blocks."id" = transactions."blockId" WHERE transactions."senderId" IN (';
     query += joinedAddrs + ")";
     query += ' OR transactions."recipientId" IN ('
     query += joinedAddrs + ");";
