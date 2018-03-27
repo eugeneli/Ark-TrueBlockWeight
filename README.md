@@ -42,8 +42,8 @@ Optionally, you can pass in an arbitrary number of blocks:  ``` node main.js sta
 var TBW = require("../true_block_weight/main");
 var options = {
     blacklist: {"someArkAddress": true, "otherArkAddress": true ...},
-    numBlocks: 422, //Defaults to 211 if left empty
-    blockShareFunc = (poolSize, voterBalanceAtblock) => { ... } //Function to be run when calculating each voter's share per block (Leave empty for 100% payouts, see examples below)
+    blocks: 422, //Defaults to 211 if left empty
+    blockShareFunc: (poolSize, voterBalanceAtblock) => { ... } //Function to be run when calculating each voter's share per block (Leave empty for 100% payouts, see examples below)
 };
 TBW.getPayouts(options).then((payData) => {
     console.log(payData);
