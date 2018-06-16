@@ -7,7 +7,6 @@
     "delegate": "delegate_name",
     "blocks": 211,
     "payout": 0.90,
-    "blacklist": {
-        "ADDRESSTOBLACKLIST": true
-    }
+    "fullBalances": [],
+    "blacklist": []
 }

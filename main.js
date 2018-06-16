@@ -19,7 +19,9 @@ let sortedForgedBlocks = [],
     numBlocks,
     newTxs,
     blacklist = config.blacklist,
-    unpaidBalances = {};
+    fullBalances = config.fullBalances,
+    unpaidBalances = {},
+    startTime = new Date().getTime() / 1000;
 
 BigNumber.config({
     DECIMAL_PLACES: 8,
@@ -222,7 +224,6 @@ let processBalances = () => {
         currentVoters = new Set(voterAddrs);
         let voterSum = 0;
         latestForgedBlock.voterBalances.forEach((bal) => voterSum += bal[0])
-        let rewardFeeSum = sortedForgedBlocks.reduce((total, block) => total + block.rewardFees, 0);
         console.log("Pool balance calculations complete");
 
         resolve();
@@ -251,28 +252,21 @@ let getVoterWeight = () => {
 
             block.voterBalances.forEach((balanceData, addr) => {
 
-                let curData = sortedForgedBlocks[idx].voterBalances.get(addr);
-                let max = new BigNumber(curData.balance);
+                //let curData = sortedForgedBlocks[idx].voterBalances.get(addr);
+                let max = new BigNumber(balanceData.balance);
 
-                if (fullBalances.includes(addr)) {
-                    current = max;
-                } else {
-                    current = max.times(config.payout);
+                if (!fullBalances.includes(addr)) {
+                    max = max.times(config.payout);
                 }
 
-                curData.current = current.toNumber();
+                balanceData.max = max.toNumber();
 
-                sortedForgedBlocks[idx].voterBalances.set(addr, curData);
-
-                balanceData = curData;
-
-                if (balanceData.current > 1) {
-                    //[paidShare, tax]
-                    let share = utils.blockShareFunc(poolTotal, balanceData.current);
+                if (balanceData.balance > 1) {
+                    let share = utils.blockShareFunc(poolTotal, balanceData.max);
                     balanceData.share = share[0];
 
                     //If they are blacklisted, keep their share
-                    if (blacklist[addr]) {
+                    if (blacklist.includes(addr)) {
                         balanceData.share = new BigNumber(0);
                         taxes = taxes.plus(share[0]);
                     }
@@ -280,7 +274,6 @@ let getVoterWeight = () => {
                     taxes = taxes.plus(share[1]);
                     totalPay = totalPay.plus(share[0]);
                 }
-
 
             });
         });
@@ -306,7 +299,7 @@ let handleData = (taxes) => {
                 payouts[addr] = pay.plus(balanceData.share);
             });
         }
-        
+
         let totalPayouts = new BigNumber(0);
         Object.keys(payouts).forEach((key) => totalPayouts = totalPayouts.plus(payouts[key]));
         let taxes = new BigNumber(forgedToday * BLOCK_REWARD).minus(totalPayouts);
@@ -314,7 +307,7 @@ let handleData = (taxes) => {
         console.log("Total paid out: " + totalPayouts.dividedBy(100000000).toString());
         console.log("Total taxes collected: " + taxes.dividedBy(100000000).toString());
         console.log("Effective Payout: " + ePayout);
-        console.log("True block weight complete");
+        console.log("True block weight complete\nRun Time:", ((new Date().getTime() / 1000) - startTime).toFixed(2), "seconds.");
 
         let payData = {
             taxes: taxes,
@@ -327,7 +320,8 @@ let handleData = (taxes) => {
 };
 
 exports.getPayouts = (options) => {
-    blacklist = options.blacklist ? options.blacklist : {};
+    blacklist = options.blacklist ? options.blacklist : [];
+    fullBalances = options.fullBalances ? options.fullBalances : [];
     unpaidBalances = options.unpaidBalances ? options.unpaidBalances : {};
     numBlocks = options.blocks ? options.blocks : config.blocks;
     nBlockTimePeriod = numBlocks * 8 * 51; //Look back numBlocks
