@@ -1,113 +1,54 @@
-const {
-    Client
-} = require('pg');
-const config = require('./config.json');
-
-const BLOCK_REWARD = 200000000;
-const DAILY_FORGED_BLOCKS = 211;
-const NODE_CREDS = {
-    user: config.user,
-    host: config.host,
-    database: config.database,
-    password: config.password,
-    port: config.port,
-};
-
-var QueryStream = require('pg-query-stream'),
-    fs = require('fs'),
+const config = require('./config.json'),
+    utils = require('./utils.js'),
+    BLOCK_REWARD = 200000000,
+    DAILY_FORGED_BLOCKS = 211,
+    MONTHLY_FORGED_BLOCKS = DAILY_FORGED_BLOCKS * 30,
     BigNumber = require('bignumber.js'),
     queries = require('./queries.js'),
-    sortedForgedBlocks = [],
+    request = require('request-promise-native');
+
+let sortedForgedBlocks = [],
     latestForgedBlock,
+    earliestForgedBlock,
+    timestampToday,
+    nBlockTimePeriod,
+    curBals,
     votes = [],
-    voterBlockShares = new Map(),
-    client = new Client(NODE_CREDS);
+    voterBals = {},
+    forgedToday = 0,
+    numBlocks,
+    newTxs,
+    blacklist = config.blacklist,
+    unpaidBalances = {};
 
 BigNumber.config({
     DECIMAL_PLACES: 8,
     ERRORS: false
 });
+
 queries.init(config.publicKey, config.pKey);
 
-var blacklist;
-var numBlocks;
+process.on(
+    "unhandledRejection",
+    function handleWarning(reason, promise) {
 
-function getOctal(s) {
-    s = s.replace(/^ +| +$/g, '');
+        console.log(reason);
 
-    var n;
-    var matches = s.match(/^([-+]?[0-9a-f]*)(\.[0-9a-f]*)?$/i);
-    if (!matches /*/^[-+]?\w*(\.\w*)?$/.test(s) */ ) {
-        n = NaN;
-    } else if (!matches[2] || matches[2].length < 2) {
-        n = parseInt('0' + matches[1], 16);
-    } else {
-        n = parseInt('0' + matches[1], 16);
-        n += (matches[1].subString(0, 1) == '-' ? -1 : +1) * parseInt(matches[2].subString(1), 16) / Math.pow(16, matches[2].length - 1);
     }
-    // FIXME: check for invalid characters, that are silently ignored by parseInt()
-    var output;
-    if (isNaN(n)) {
-        output = '';
-    } else if (16.25.toString(8) == '10.4') {
-        // Opera 9 does not support toString() for floats with base != 10
-        output = n.toString(8);
-    } else {
-        output = (n > 0 ? Math.floor(n) : Math.ceil(n)).toString(8);
-        if (n % 1) {
-            output += '.' + Math.round((Math.abs(n) % 1) * Math.pow(8, 8)).toString(8);
-            output = output.replace(/0+$/, '');
-        }
-    }
-    return (output)
-}
+);
 
-var blockShareFunc = (poolSize, voterBalance) => {
-    var forgedBalance = new BigNumber(BLOCK_REWARD);
-    var poolSize = new BigNumber(poolSize);
-    var balance = new BigNumber(voterBalance);
-
-    var fullPay = forgedBalance.times(balance).dividedBy(poolSize);
-
-    return [fullPay, new BigNumber(0)];
-};
-
-var connect = () => {
+let getKey = () => {
     return new Promise((resolve, reject) => {
-        client.connect((err) => {
-            if (!err) {
-                console.log("Node database connection opened")
-                resolve();
-            } else {
-                console.log(err);
-                reject("Error getting node database connection");
-            }
-        })
-    })
-};
-
-var close = (taxes) => {
-    return new Promise((resolve, reject) => {
-        client.end((err) => {
-            console.log("Node database connection closed");
-            client = new Client(NODE_CREDS); //reinstantiate client for next run
-            resolve(taxes);
-        });
-    })
-};
-
-var getKey = () => {
-    return new Promise((resolve, reject) => {
-        var keysQuery = queries.getKeys(config.delegate);
-        client.query(keysQuery, (err, res) => {
+        let keysQuery = queries.getKeys(config.delegate);
+        utils.client.query(keysQuery, (err, res) => {
             if (typeof res == "undefined")
-                reject("Error querying node db for generated blocks");
+                reject("Error querying node db for keys");
             config.pKey = JSON.parse(res.rows[0].rawasset)['delegate']['publicKey'];
-            var pKey = config.pKey;
+            let pKey = config.pKey;
             config.publicKey = "";
-            for (var i = 0; i < pKey.length; i++) {
+            for (let i = 0; i < pKey.length; i++) {
                 chunk = pKey[i] + pKey[i + 1];
-                thisChunk = getOctal(chunk);
+                thisChunk = utils.getOctal(chunk);
                 while (thisChunk.length < 3) {
                     thisChunk = "0" + thisChunk;
                 }
@@ -120,10 +61,11 @@ var getKey = () => {
     })
 };
 
-var getBlocks = () => {
+let getBlocks = () => {
     return new Promise((resolve, reject) => {
         // Get all our forged blocks
-        client.query(queries.getGeneratedBlocks(numBlocks), (err, res) => {
+        let blockQuery = queries.getGeneratedBlocks(Math.floor(numBlocks));
+        utils.client.query(blockQuery, (err, res) => {
             if (typeof res == "undefined")
                 reject("Error querying node db for generated blocks");
 
@@ -134,9 +76,13 @@ var getBlocks = () => {
                     'fees': row.totalFee,
                     'poolBalance': 0
                 };
-            }).sort((a, b) => a.height - b.height);
+            });
 
-            latestForgedBlock = sortedForgedBlocks[sortedForgedBlocks.length - 1];
+            earliestForgedBlock = sortedForgedBlocks[sortedForgedBlocks.length - 1];
+            latestForgedBlock = sortedForgedBlocks[0];
+
+            // Timestamp 24h ago
+            timestampToday = latestForgedBlock.timestamp - nBlockTimePeriod;
 
             console.log("Retrieved forged blocks")
             resolve();
@@ -144,236 +90,265 @@ var getBlocks = () => {
     })
 };
 
-
-var getVoters = () => {
+let getCurrentBalances = () => {
     return new Promise((resolve, reject) => {
-        var votersQuery = queries.getVoters(latestForgedBlock.timestamp);
-        client.query(votersQuery, (err, res) => {
+        // Get all our forged blocks
+        let currentBalQuery = queries.getVoterBalances();
+        utils.client.query(currentBalQuery, (err, res) => {
             if (typeof res == "undefined")
-                reject("Error querying node db for voters");
+                reject("Error querying node db for current voter balances");
 
-            votes = res.rows.map((row) => {
+            curBals = res.rows.map((row) => {
                 return {
-                    'voter': row.senderId,
-                    'height': row.height,
-                    'timestamp': row.timestamp,
-                    'balances': {}
+                    'address': row.address,
+                    'balance': parseInt(row.balance)
                 };
-            });
-
-            console.log(`Historical voters retrieved (${votes.length})`);
+            }).sort((a, b) => b.balance - a.balance);
+            console.log("Retrieved current voter balances")
             resolve();
         })
     })
 };
 
-var getVoterWeight = () => {
-    console.log("Calculating voter weights for each block...");
-    var taxes = new BigNumber(0);
-    var totalPay = new BigNumber(0);
-    return new Promise((resolve, rej) => {
-        sortedForgedBlocks.forEach((block) => {
-            var blockHeight = block.height;
 
-            var poolTotal = 0;
-            block.voterBalances.forEach((balanceData, addr) => {
-                if (balanceData[0] > 0)
-                    poolTotal += balanceData[0]
+let getNewTransactions = () => {
+    return new Promise((resolve, reject) => {
+        curBals.forEach(val => {
+            voterBals[val.address] = val.balance
+        })
+        let addrs = curBals.map(val => val.address)
+        let newTxQuery = queries.getRelevantTransactions(addrs, earliestForgedBlock.timestamp, latestForgedBlock.timestamp);
+
+        utils.client.query(newTxQuery, (err, res) => {
+            if (typeof res == "undefined")
+                reject("Error querying node db for voters");
+
+            newTxs = res.rows.map(tx => {
+                return {
+                    'amount': tx.amount,
+                    'height': tx.height,
+                    'recipientId': tx.recipientId,
+                    'senderId': tx.senderId,
+                    'fee': tx.fee,
+                    'rawasset': tx.rawasset || '{}'
+                }
             });
 
-            //compute voter shares
+            console.log(`New transactions received (${newTxs.length})`);
+            resolve();
+        })
+    })
+};
+
+let processBalances = () => {
+    return new Promise((resolve, rej) => {
+        let voterAddrs = curBals.map((vote) => vote.address);
+
+        let allVotersEver = new Set(voterAddrs);
+
+        sortedForgedBlocks.forEach((forged) => {
+            //forged.voterBalances = new Map();
+            if (forged.timestamp >= timestampToday) {
+                forgedToday++;
+            }
+        });
+
+        let totalBalanceThusFar = new Map(curBals.map((vote) => [vote.address, vote.balance]));
+        let currentVoters = new Set(voterAddrs);
+        let txs = newTxs.sort((a, b) => b.height - a.height); //sort descending
+
+        console.log("Processing new transactions...")
+
+        // Sort txs into the blocks they apply to
+        let sortTx = (tx) => {
+            sortedForgedBlocks.some((block, idx) => {
+                // Populate the balances
+                if (!sortedForgedBlocks[idx + 1].voterBalances)
+                    sortedForgedBlocks[idx + 1].voterBalances = new Map(block.voterBalances);
+                if (sortedForgedBlocks[idx + 1]) { // Don't do anything on the last block
+                    if (tx.height <= block.height && tx.height > sortedForgedBlocks[idx + 1].height) {
+                        // Apply the tx
+                        if (allVotersEver.has(tx.senderId)) {
+                            let thusFar = totalBalanceThusFar.get(tx.senderId);
+                            thusFar += (parseInt(tx.fee) + parseInt(tx.amount));
+                            totalBalanceThusFar.set(tx.senderId, thusFar);
+                            sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
+                                'balance': thusFar,
+                                'share': 0
+                            });
+                        }
+                        if (allVotersEver.has(tx.recipientId)) {
+                            let thusFar = totalBalanceThusFar.get(tx.recipientId);
+                            thusFar -= parseInt(tx.amount);
+                            totalBalanceThusFar.set(tx.recipientId, thusFar);
+                            sortedForgedBlocks[idx + 1].voterBalances.set(tx.recipientId, {
+                                'balance': thusFar,
+                                'share': 0
+                            });
+                        }
+                        // Apply votes
+                        if (tx.rawasset.includes(`-${config.pKey}`)) {
+                            currentVoters.add(tx.senderId);
+                            sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
+                                'balance': totalBalanceThusFar.get(tx.senderId),
+                                'share': 0
+                            });
+                        } else if (tx.rawasset.includes(`+${config.pKey}`)) {
+                            currentVoters.delete(tx.senderId);
+                            sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
+                                'balance': 0,
+                                'share': 0
+                            });
+                        }
+                        return true;
+                    }
+                }
+            })
+        }
+
+        sortedForgedBlocks[0].voterBalances = new Map(curBals.map(vote => [vote.address, { // Populate the highest block
+            'balance': vote.balance,
+            'share': 0
+        }]));
+        txs.forEach((tx, idx) => {
+            sortTx(tx);
+        });
+        // Populate the last blocks we missed
+        sortedForgedBlocks.forEach((block, idx) => {
+            if (!block.voterBalances) {
+                block.voterBalances = new Map(sortedForgedBlocks[idx - 1].voterBalances);
+            }
+        })
+        currentVoters = new Set(voterAddrs);
+        let voterSum = 0;
+        latestForgedBlock.voterBalances.forEach((bal) => voterSum += bal[0])
+        let rewardFeeSum = sortedForgedBlocks.reduce((total, block) => total + block.rewardFees, 0);
+        console.log("Pool balance calculations complete");
+
+        resolve();
+    })
+};
+
+let getVoterWeight = () => {
+    console.log("Calculating voter weights for each block...");
+    let taxes = new BigNumber(0);
+    let totalPay = new BigNumber(0);
+    return new Promise((resolve, rej) => {
+        sortedForgedBlocks = sortedForgedBlocks.reverse();
+        sortedForgedBlocks.forEach((block, idx) => {
+            //console.log("block - " + parseInt(idx + 1) + " / " + sortedForgedBlocks.length + " | blockVoterBal.size: " + block.voterBalances.size);
+
+            block.voterBalances.forEach((balanceData, index) => {
+                if (balanceData.balance > (config.cap * 100000000)) {
+                    let curData = sortedForgedBlocks[idx].voterBalances.get(index);
+                    curData.balance = (config.cap * 100000000);
+                    curData.overlimit = true;
+                    sortedForgedBlocks[idx].voterBalances.set(index, curData);
+                }
+            });
+
+            const poolTotal = [...block.voterBalances.values()].map(val => val.balance).reduce((a, b) => a + b);
+
             block.voterBalances.forEach((balanceData, addr) => {
-                if (balanceData[0] > 0) {
+
+                let curData = sortedForgedBlocks[idx].voterBalances.get(addr);
+                let max = new BigNumber(curData.balance);
+
+                if (fullBalances.includes(addr)) {
+                    current = max;
+                } else {
+                    current = max.times(config.payout);
+                }
+
+                curData.current = current.toNumber();
+
+                sortedForgedBlocks[idx].voterBalances.set(addr, curData);
+
+                balanceData = curData;
+
+                if (balanceData.current > 1) {
                     //[paidShare, tax]
-                    var share = blockShareFunc(poolTotal, balanceData[0]);
-                    balanceData[1] = share[0];
+                    let share = utils.blockShareFunc(poolTotal, balanceData.current);
+                    balanceData.share = share[0];
 
                     //If they are blacklisted, keep their share
                     if (blacklist[addr]) {
-                        balanceData[1] = new BigNumber(0);
+                        balanceData.share = new BigNumber(0);
                         taxes = taxes.plus(share[0]);
                     }
 
                     taxes = taxes.plus(share[1]);
                     totalPay = totalPay.plus(share[0]);
                 }
+
+
             });
         });
 
-        console.log("TAXES: " + taxes.dividedBy(100000000));
-        console.log("PAYOUTS: " + totalPay.dividedBy(100000000));
         console.log("Voter weight calculation complete");
 
         resolve(taxes);
     })
 };
 
-var handleData = (taxes) => {
+let handleData = (taxes) => {
     return new Promise((resolve, rej) => {
-        var payouts = {};
-        for (let i = 0; i < sortedForgedBlocks.length; i++) {
-            var block = sortedForgedBlocks[i];
+        let payouts = {};
+
+        // Only pay up to number of blocks passed 
+        if (forgedToday > numBlocks)
+            forgedToday = numBlocks;
+
+        for (let i = sortedForgedBlocks.length - forgedToday; i < sortedForgedBlocks.length; i++) {
+            let block = sortedForgedBlocks[i];
             block.voterBalances.forEach((balanceData, addr) => {
-                var pay = payouts[addr] != null ? payouts[addr] : new BigNumber(0);
-                payouts[addr] = pay.plus(balanceData[1]);
+                let pay = payouts[addr] != null ? payouts[addr] : new BigNumber(0);
+                payouts[addr] = pay.plus(balanceData.share);
             });
-
-            /*
-            //For display purposes only
-            if (i == sortedForgedBlocks.length - 1) {
-                var asd = new BigNumber(0);
-                sortedForgedBlocks[i].voterBalances.forEach((balanceData, addr) => {
-                    asd = asd.plus(balanceData[1]);
-                });
-                console.log("last block sum: " + asd.dividedBy(100000000));
-            }
-            */
         }
-        var totalPayouts = new BigNumber(0);
+        
+        let totalPayouts = new BigNumber(0);
         Object.keys(payouts).forEach((key) => totalPayouts = totalPayouts.plus(payouts[key]));
+        let taxes = new BigNumber(forgedToday * BLOCK_REWARD).minus(totalPayouts);
+        let ePayout = totalPayouts.dividedBy(100000000).dividedBy(new BigNumber(forgedToday).times(2)).times(100).toFormat(2);
         console.log("Total paid out: " + totalPayouts.dividedBy(100000000).toString());
+        console.log("Total taxes collected: " + taxes.dividedBy(100000000).toString());
+        console.log("Effective Payout: " + ePayout);
         console.log("True block weight complete");
-        if (config.user == "tbw" && config.password == "tbw")
-            console.log("You appear to be using the public TBW node. \nPlease consider donating to AKdr5d9AMEnsKYxpDcoHdyyjSCKVx3r9Nj so we can continue to provide this service publicly.")
 
-
-        var payData = {
+        let payData = {
             taxes: taxes,
-            payouts: payouts
+            payouts: payouts,
+            latestForgedBlock: latestForgedBlock
         };
 
         resolve(payData);
     })
 };
 
-var getPoolBalances = () => {
-    return new Promise((resolve, rej) => {
-        var voterAddrs = votes.map((vote) => vote.voter);
-        var fullBalanceQuery = queries.getTransactions(voterAddrs);
-
-        client.query(fullBalanceQuery, (err, res) => {
-            if (typeof res == "undefined")
-                rej("Error querying node db for full balances");
-
-            var allVotersEver = new Set(voterAddrs);
-
-            sortedForgedBlocks.forEach((forged) => {
-                forged.rewardFees = parseInt(forged.fees) + parseInt(BLOCK_REWARD);
-                forged.voterBalances = new Map();
-            });
-
-            var contributionThusFar = new Map();
-            var totalBalanceThusFar = new Map();
-            var currentVoters = new Set();
-
-            var txs = res.rows.sort((a, b) => a.height - b.height); //sort ascending
-
-            var voteUpdate = (tx, addr) => {
-                if (tx.rawasset.includes(`+${config.pKey}`)) //If just voted now
-                {
-                    currentVoters.add(addr);
-                    var runningTotal = totalBalanceThusFar.get(addr);
-                    contributionThusFar.set(addr, runningTotal);
-
-                    sortedForgedBlocks.forEach((block) => {
-                        if (block.height > tx.height) {
-                            block.voterBalances.set(addr, [runningTotal, 0]);
-                        }
-                    });
-                }
-                if (tx.rawasset.includes(`-${config.pKey}`)) //If just unvoted now
-                {
-                    currentVoters.delete(addr);
-                    sortedForgedBlocks.forEach((block) => {
-                        if (block.height > tx.height) {
-                            block.voterBalances.set(addr, [0, 0]);
-                        }
-                    });
-
-                    contributionThusFar.set(addr, 0);
-                }
-            }
-
-            console.log("Processing txs...")
-            txs.forEach((tx, idx) => {
-                if (allVotersEver.has(tx.recipientId)) //A voter received ARK
-                {
-                    var amount = parseInt(tx.amount);
-                    if (currentVoters.has(tx.recipientId)) //If they are a voter, update their contribution to the block
-                    {
-                        var thusFar = contributionThusFar.get(tx.recipientId);
-                        thusFar = thusFar == null ? 0 : thusFar;
-                        totalBalanceThusFar.set(tx.recipientId, thusFar + amount); //Keep track of their balance no matter what
-
-                        contributionThusFar.set(tx.recipientId, thusFar + amount);
-                        sortedForgedBlocks.forEach((block) => {
-                            if (block.height > tx.height) {
-                                block.voterBalances.set(tx.recipientId, [thusFar + amount, 0]);
-                            }
-                        });
-                    } else {
-                        var thusFar = totalBalanceThusFar.get(tx.recipientId);
-                        thusFar = thusFar == null ? 0 : thusFar;
-                        totalBalanceThusFar.set(tx.recipientId, thusFar + amount); //Keep track of their balance no matter what
-                    }
-                }
-
-                if (allVotersEver.has(tx.senderId)) //A voter sent ARK
-                {
-                    if (currentVoters.has(tx.senderId)) //If they are a voter, update their contribution to the block
-                    {
-                        var amount = parseInt(tx.amount) + parseInt(tx.fee);
-                        var thusFar = contributionThusFar.get(tx.senderId);
-                        thusFar = thusFar == null ? 0 : thusFar;
-                        totalBalanceThusFar.set(tx.senderId, thusFar - amount); //Keep track of their balance no matter what
-                        contributionThusFar.set(tx.senderId, thusFar - amount);
-                        sortedForgedBlocks.forEach((block) => {
-                            if (block.height > tx.height) {
-                                block.voterBalances.set(tx.senderId, [thusFar - amount, 0]);
-                            }
-                        });
-                    } else {
-                        var amount = parseInt(tx.amount) + parseInt(tx.fee);
-                        var thusFar = totalBalanceThusFar.get(tx.senderId);
-                        thusFar = thusFar == null ? 0 : thusFar;
-                        totalBalanceThusFar.set(tx.senderId, thusFar - amount); //Keep track of their balance no matter what
-                    }
-
-                    //check if voted
-                    if (tx.rawasset != null && tx.rawasset != "{}")
-                        voteUpdate(tx, tx.senderId);
-                }
-            });
-
-            var voterSum = 0;
-            latestForgedBlock.voterBalances.forEach((bal) => voterSum += bal[0])
-            var rewardFeeSum = sortedForgedBlocks.reduce((total, block) => total + block.rewardFees, 0);
-            console.log("Pool balance calculations complete");
-
-            resolve();
-        })
-    })
-};
-
 exports.getPayouts = (options) => {
     blacklist = options.blacklist ? options.blacklist : {};
-    numBlocks = options.blocks ? options.blocks : DAILY_FORGED_BLOCKS;
-    blockShareFunc = options.blockShareFunc ? options.blockShareFunc : blockShareFunc;
+    unpaidBalances = options.unpaidBalances ? options.unpaidBalances : {};
+    numBlocks = options.blocks ? options.blocks : config.blocks;
+    nBlockTimePeriod = numBlocks * 8 * 51; //Look back numBlocks
+    blockShareFunc = options.blockShareFunc ? options.blockShareFunc : utils.blockShareFunc;
 
-    console.log(`Calculating true block weight for ${numBlocks} forged blocks`);
 
-    return connect()
-        .then(getKey)
-        .then(getBlocks)
-        .then(getVoters)
-        .then(getPoolBalances)
+    console.log(`Calculating TBW and paying out ${numBlocks} forged blocks with ${nBlockTimePeriod} seconds look-back`);
+
+    return utils.connect()
+        .then(getKey) // Get Delegate Public Keys
+        .then(getCurrentBalances) // Get Current Balances
+        .then(getBlocks) // Get Blocks
+        .then(getNewTransactions) // Get Vote and Balance Changes
+        .then(processBalances) // Process relevant txs
         .then(getVoterWeight)
-        .then(close)
+        .then(utils.close)
         .then(handleData);
 };
 
-var args = process.argv.slice(2);
+let args = process.argv.slice(2);
 if (args.length >= 1) {
     if (args[0] == "start")
         exports.getPayouts({});
-};
+}
