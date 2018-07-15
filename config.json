@@ -3,5 +3,6 @@
     "host": "localhost",
     "database": "ark_mainnet",
     "password": "tbw",
-    "port": 5432
+    "port": 5432,
+    "delegate": "biz_private"
 }
