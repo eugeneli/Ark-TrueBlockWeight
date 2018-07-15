@@ -3,10 +3,5 @@
     "host": "localhost",
     "database": "ark_mainnet",
     "password": "tbw",
-    "port": 5432,
-    "delegate": "delegate_name",
-    "blocks": 211,
-    "payout": 0.90,
-    "fullBalances": [],
-    "blacklist": []
+    "port": 5432
 }

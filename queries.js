@@ -1,7 +1,5 @@
-"use strict";
-
-var publicKey;
-var pKey;
+let publicKey;
+let pKey;
 
 exports.init = (publicKeyBytes, publicKeyString) => {
     publicKey = publicKeyBytes;
