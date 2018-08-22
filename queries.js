@@ -32,7 +32,7 @@ exports.getVoterBalances = () => {
 exports.getRelevantTransactions = (addrs, timeStart, timeEnd) => {
     let joinedAddrs = addrs.map((addr) => `'${addr}'`).join(",");
 
-    let query = `SELECT transactions."id", transactions."amount", transactions."timestamp", transactions."recipientId", transactions."senderId", \
+    let query = `SELECT transactions."id", transactions."amount", transactions."timestamp", transactions."recipientId", transactions."senderId", transactions."type", \
                 transactions."fee", transactions."rawasset", blocks."height" \
                 FROM transactions INNER JOIN blocks ON blocks."id" = transactions."blockId" \ 
                 WHERE transactions."timestamp" >= ${timeStart} \

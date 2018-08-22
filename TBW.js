@@ -110,6 +110,7 @@ module.exports = class TBW {
                     "recipientId": tx.recipientId,
                     "senderId": tx.senderId,
                     "fee": tx.fee,
+                    "type": tx.type,
                     "rawasset": tx.rawasset || "{}"
                 }
             });
@@ -178,14 +179,14 @@ module.exports = class TBW {
                         }
 
                         // Apply votes
-                        if (tx.rawasset.includes(`-${this.pKey}`))
-                        {
+                        if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `-${this.pKey}`)
+                        {   
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
                                 "balance": totalBalanceThusFar.get(tx.senderId),
                                 "share": 0
                             });
                         } 
-                        else if (tx.rawasset.includes(`+${this.pKey}`))
+                        else if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `+${this.pKey}`)
                         {
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
                                 "balance": 0,
