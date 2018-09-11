@@ -33,5 +33,5 @@ exports.getPayouts = async (options) => {
 let args = process.argv.slice(2);
 if (args.length >= 1) {
     if (args[0] == "start")
-        exports.getPayouts({ print: true });
+        exports.getPayouts({ print: false, numBlocks: config.numblocks || 2954 });
 }

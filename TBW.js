@@ -35,9 +35,7 @@ module.exports = class TBW {
             for (let i = 0; i < this.pKey.length; i++) {
                 let chunk = this.pKey[i] + this.pKey[i + 1];
                 let thisChunk = util.getOctal(chunk);
-                while (thisChunk.length < 3) {
-                    thisChunk = "0" + thisChunk;
-                }
+                thisChunk = thisChunk.padStart(3, "0");
                 this.publicKey = this.publicKey + "\\" + thisChunk;
                 i++;
             }
@@ -231,7 +229,7 @@ module.exports = class TBW {
                     const curData = this.sortedForgedBlocks[idx].voterBalances.get(index);
                     curData.balance = cap;
                     curData.overlimit = true;
-                    sortedForgedBlocks[idx].voterBalances.set(index, curData);
+                    this.sortedForgedBlocks[idx].voterBalances.set(index, curData);
                 }
             });
 
