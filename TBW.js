@@ -15,6 +15,7 @@ module.exports = class TBW {
         this.config = { ...config };
         this.psql = new Postgres(this.config);
 
+        this.startBlock = config.startBlock || null;
         this.sortedForgedBlocks = [];
         this.curBals = [];
         this.voterAddrs = [];
@@ -72,7 +73,7 @@ module.exports = class TBW {
 
     async getBlocks() {
         // Get all our forged blocks
-        const blockQuery = queries.getGeneratedBlocks(Math.floor(this.config.numBlocks));
+        const blockQuery = queries.getGeneratedBlocks(Math.floor(this.config.numBlocks), this.startBlock);
         try {
             const res = await this.psql.query(blockQuery);
     
@@ -127,7 +128,7 @@ module.exports = class TBW {
         const allVotersEver = new Set(this.voterAddrs);
 
         this.sortedForgedBlocks.forEach((forged) => {
-            if(forged.timestamp >= timestampToday) {
+            if(forged.timestamp >= timestampToday || this.startBlock) {
                 this.forgedToday++;
             }
         });
@@ -221,7 +222,7 @@ module.exports = class TBW {
         
         this.sortedForgedBlocks = this.sortedForgedBlocks.reverse();
         this.sortedForgedBlocks.forEach((block, idx) => {
-            //console.log("block - " + parseInt(idx + 1) + " / " + sortedForgedBlocks.length + " | blockVoterBal.size: " + block.voterBalances.size);
+            //console.log("block - " + parseInt(idx + 1) + " / " + this.sortedForgedBlocks.length + " | blockVoterBal.size: " + block.voterBalances.size);
 
             block.voterBalances.forEach((balanceData, index) => {
                 if (balanceData.balance > cap)
@@ -260,7 +261,7 @@ module.exports = class TBW {
         const payouts = {};
 
         // Only pay up to number of blocks passed 
-        if (this.forgedToday > this.config.numBlocks)
+        if (this.forgedToday > this.config.numBlocks && !this.startBlock)
             this.forgedToday = this.config.numBlocks;
 
         for (let i = this.sortedForgedBlocks.length - this.forgedToday; i < this.sortedForgedBlocks.length; i++)

@@ -6,12 +6,13 @@ exports.init = (publicKeyBytes, publicKeyString) => {
     pKey = publicKeyString;
 };
 
-exports.getGeneratedBlocks = (numBlocks) => {
+exports.getGeneratedBlocks = (numBlocks, startBlock) => {
     return `SELECT blocks.height, blocks.timestamp, blocks."totalFee" \
                 FROM public.blocks \
                 WHERE blocks."generatorPublicKey" = '${publicKey}'\
+                AND blocks."height" >= ${startBlock ? startBlock : 1}\
                 ORDER BY blocks.height DESC \
-                LIMIT ${numBlocks};`;
+                LIMIT ${startBlock ? 'ALL' : numBlocks };`;
 };
 
 exports.getKeys = (delegate) => {

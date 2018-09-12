@@ -10,9 +10,13 @@ exports.getPayouts = async (options) => {
     config.delegate = options.delegate ? options.delegate : config.delegate;
     config.blockShareFunc = options.blockShareFunc ? options.blockShareFunc : util.blockShareFunc;
     config.nBlockTimePeriod = config.numBlocks * 8 * 51; //Look back numBlocks
+    config.startBlock = config.start;
     const startTime = new Date().getTime() / 1000;
-
-    console.log(`Calculating TBW and paying out ${config.numBlocks} forged blocks with ${config.nBlockTimePeriod} seconds look-back`);
+    
+    if (config.startBlock)
+        console.log(`Calculating TBW and paying out from block ${config.startBlock}`);
+    else
+        console.log(`Calculating TBW and paying out ${config.numBlocks} forged blocks with ${config.nBlockTimePeriod} seconds look-back`);
 
     const tbw = new TBW(config);
     await tbw.init();
@@ -33,5 +37,5 @@ exports.getPayouts = async (options) => {
 let args = process.argv.slice(2);
 if (args.length >= 1) {
     if (args[0] == "start")
-        exports.getPayouts({ print: false, numBlocks: config.numblocks || 2954 });
+        exports.getPayouts({ print: false, numBlocks: config.numblocks || 211 });
 }
