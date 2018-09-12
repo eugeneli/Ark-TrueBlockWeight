@@ -10,7 +10,7 @@ exports.getPayouts = async (options) => {
     config.delegate = options.delegate ? options.delegate : config.delegate;
     config.blockShareFunc = options.blockShareFunc ? options.blockShareFunc : util.blockShareFunc;
     config.nBlockTimePeriod = config.numBlocks * 8 * 51; //Look back numBlocks
-    config.startBlock = config.start;
+    config.startBlock = options.start ? options.start : config.start;
     const startTime = new Date().getTime() / 1000;
     
     if (config.startBlock)
