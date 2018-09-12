@@ -9,22 +9,23 @@ Ark’s Delegated Proof of Stake system encourages delegates to provide incentiv
 ## Getting Started
 
 You will need to be running a [full node](https://github.com/ArkEcosystem/ark-node) to have a copy of the blockchain to query.
-Then modify ```config.json``` with your Ark Node's Postgresql database credentials and your delegate's public key.
+Then modify ```config.json``` with your Ark Node's Postgresql database credentials and your delegate's name.
+
 ```
 {
     "user": "tbw",
     "host": "localhost",
     "database": "ark_mainnet",
     "password": "tbw",
+    "blocks": 211,
     "port": 5432,
     "delegate": "Delegate Name"
 }
 ```
 
-If your pay script and node are not on the same server, you will need to configure the node's Postgresql database for external access.
+`blocks` allows you to specify how many blocks you'd like to calculate payment for. If you prefer to instead calculate all blocks starting from a specific height, you can specify `start` with your starting block. This will ignore `blocks` if it is specified.
 
-##### Public Node
-biz_classic offers a publicly accessible read-only ARK database for use with the True Block Weight script for delegates. Please reach out to one of us (either goldenpepe or moonman) on the ARK slack if you are a delegate who wishes to use the public node for your configuration.
+If your pay script and node are not on the same server, you will need to configure the node's Postgresql database for external access.
 
 ### Installation and Usage
 First, remember to configure your node's database as mentioned above and insert your credentials in ```config.json```
@@ -41,7 +42,7 @@ Optionally, you can pass in an arbitrary number of blocks:  ``` node main.js sta
 ```
 var TBW = require("../true_block_weight/main");
 var options = {
-    blacklist: {"someArkAddress": true, "otherArkAddress": true ...},
+    blacklist: ["someArkAddress", "otherArkAddress"],
     blocks: 422, //Defaults to 211 if left empty
     blockShareFunc: (poolSize, voterBalanceAtblock) => { ... } //Function to be run when calculating each voter's share per block (Leave empty for 100% payouts, see examples below)
 };
@@ -110,7 +111,7 @@ See also the list of [contributors](https://github.com/eugeneli/Ark-TrueBlockWei
 
 The MIT License (MIT)
 
-Copyright (c) 2017 Eugene Li & George Kushnir
+Copyright (c) 2018 Eugene Li & George Kushnir
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:  
 
