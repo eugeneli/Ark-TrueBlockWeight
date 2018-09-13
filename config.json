@@ -4,5 +4,5 @@
     "database": "ark_mainnet",
     "password": "tbw",
     "port": 5432,
-    "delegate": "delegate_name"
+    "delegate": "biz_private"
 }
