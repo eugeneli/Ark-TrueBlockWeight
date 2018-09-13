@@ -6,6 +6,12 @@
 
 Ark’s Delegated Proof of Stake system encourages delegates to provide incentives to voters in the form of profit sharing from their forging rewards. In the current ecosystem, there is no way for the average non-technical delegate to get a forging node up and running with an accurate profit sharing distribution, as there is no existing public payout code that will exactly calculate rewards based on each individual voter’s staked ARK in the delegate pool. biz_classic has been developing a script that aims to address this issue whilst also allowing custom configurations on a per delegate basis, allowing for a diverse ecosystem of pools.
 
+# Introduction
+
+<p align="center">
+    <a href="https://arkcommunity.fund/"><img src="https://arkcommunity.fund/media-kit/funded/banner.png" /></a>
+</p>
+
 ## Getting Started
 
 You will need to be running a [full node](https://github.com/ArkEcosystem/ark-node) to have a copy of the blockchain to query.
