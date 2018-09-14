@@ -29,7 +29,7 @@ module.exports = class TBW {
         let keysQuery = queries.getKeys(this.config.delegate);
         try {
             const res = await this.psql.query(keysQuery);
-            
+
             this.pKey = JSON.parse(res.rows[0].rawasset)["delegate"]["publicKey"];
             this.publicKey = "";
 
@@ -42,7 +42,7 @@ module.exports = class TBW {
             }
             queries.init(this.publicKey, this.pKey);
         }
-        catch(e) {
+        catch (e) {
             console.log("Error querying node db for keys");
             console.log(e);
         }
@@ -65,7 +65,7 @@ module.exports = class TBW {
 
             console.log("Retrieved current voter balances")
         }
-        catch(e) {
+        catch (e) {
             console.log("Error querying node db for current voter balances");
             console.log(e);
         }
@@ -76,7 +76,7 @@ module.exports = class TBW {
         const blockQuery = queries.getGeneratedBlocks(Math.floor(this.config.numBlocks), this.startBlock);
         try {
             const res = await this.psql.query(blockQuery);
-    
+
             this.sortedForgedBlocks = res.rows.map((row) => {
                 return {
                     "height": row.height,
@@ -88,7 +88,7 @@ module.exports = class TBW {
 
             console.log("Retrieved forged blocks")
         }
-        catch(e) {
+        catch (e) {
             console.log("Error querying node db for generated blocks");
             console.log(e);
         }
@@ -98,7 +98,7 @@ module.exports = class TBW {
         const earliestForgedBlock = this.sortedForgedBlocks[this.sortedForgedBlocks.length - 1];
         const latestForgedBlock = this.sortedForgedBlocks[0];
         const newTxQuery = queries.getRelevantTransactions(this.voterAddrs, earliestForgedBlock.timestamp, latestForgedBlock.timestamp);
-    
+
         try {
             const res = await this.psql.query(newTxQuery);
 
@@ -116,7 +116,7 @@ module.exports = class TBW {
 
             console.log(`New transactions retrieved (${this.newTxs.length})`);
         }
-        catch(e) {
+        catch (e) {
             console.log("Error querying node db for voters")
             console.log(e);
         }
@@ -126,9 +126,10 @@ module.exports = class TBW {
         const latestForgedBlock = this.sortedForgedBlocks[0];
         const timestampToday = latestForgedBlock.timestamp - this.config.nBlockTimePeriod; //Timestamp 24h ago
         const allVotersEver = new Set(this.voterAddrs);
+        const currentVoters = new Set(this.voterAddrs);
 
         this.sortedForgedBlocks.forEach((forged) => {
-            if(forged.timestamp >= timestampToday || this.startBlock) {
+            if (forged.timestamp >= timestampToday || this.startBlock) {
                 this.forgedToday++;
             }
         });
@@ -141,8 +142,7 @@ module.exports = class TBW {
 
         //Sort txs into the blocks they apply to
         const sortTxIntoBlocks = (tx) => {
-            for(let idx = 0; idx < this.sortedForgedBlocks.length; idx++)
-            {
+            for (let idx = 0; idx < this.sortedForgedBlocks.length; idx++) {
                 const block = this.sortedForgedBlocks[idx];
                 const txFee = parseInt(tx.fee);
                 const txAmount = parseInt(tx.amount);
@@ -152,9 +152,8 @@ module.exports = class TBW {
                     this.sortedForgedBlocks[idx + 1].voterBalances = new Map(block.voterBalances);
 
                 if (this.sortedForgedBlocks[idx + 1]) // Don't do anything on the last block
-                { 
-                    if (tx.height <= block.height && tx.height > this.sortedForgedBlocks[idx + 1].height)
-                    {
+                {
+                    if (tx.height <= block.height && tx.height > this.sortedForgedBlocks[idx + 1].height) {
                         // Apply the tx
                         if (allVotersEver.has(tx.senderId)) {
                             let thusFar = totalBalanceThusFar.get(tx.senderId);
@@ -162,7 +161,7 @@ module.exports = class TBW {
                             totalBalanceThusFar.set(tx.senderId, thusFar);
 
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
-                                "balance": thusFar,
+                                "balance": currentVoters.has(tx.senderId) ? thusFar : 0,
                                 "share": 0
                             });
                         }
@@ -172,21 +171,21 @@ module.exports = class TBW {
                             totalBalanceThusFar.set(tx.recipientId, thusFar);
 
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.recipientId, {
-                                "balance": thusFar,
+                                "balance": currentVoters.has(tx.recipientId) ? thusFar : 0,
                                 "share": 0
                             });
                         }
 
                         // Apply votes
-                        if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `-${this.pKey}`)
-                        {   
+                        if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `-${this.pKey}`) {
+                            currentVoters.set(tx.senderId, true);
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
                                 "balance": totalBalanceThusFar.get(tx.senderId),
                                 "share": 0
                             });
-                        } 
-                        else if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `+${this.pKey}`)
-                        {
+                        }
+                        else if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `+${this.pKey}`) {
+                            currentVoters.delete(tx.senderId);
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
                                 "balance": 0,
                                 "share": 0
@@ -219,14 +218,13 @@ module.exports = class TBW {
         console.log("Calculating voter weights for each block...");
         const shareFunc = this.config.blockShareFunc ? this.config.blockShareFunc : util.blockShareFunc;
         const cap = this.config.cap * 100000000;
-        
+
         this.sortedForgedBlocks = this.sortedForgedBlocks.reverse();
         this.sortedForgedBlocks.forEach((block, idx) => {
             //console.log("block - " + parseInt(idx + 1) + " / " + this.sortedForgedBlocks.length + " | blockVoterBal.size: " + block.voterBalances.size);
 
             block.voterBalances.forEach((balanceData, index) => {
-                if (balanceData.balance > cap)
-                {
+                if (balanceData.balance > cap) {
                     const curData = this.sortedForgedBlocks[idx].voterBalances.get(index);
                     curData.balance = cap;
                     curData.overlimit = true;
@@ -237,16 +235,13 @@ module.exports = class TBW {
             const poolTotal = [...block.voterBalances.values()].map(val => val.balance).reduce((a, b) => a + b);
 
             block.voterBalances.forEach((balanceData, addr) => {
-                let max = new BigNumber(balanceData.balance);
 
-                balanceData.max = max.toNumber();
-
-                if (balanceData.balance > 1) {
-                    let share = shareFunc(poolTotal, balanceData.max);
+                if (balanceData.balance > 0) {
+                    let share = shareFunc(poolTotal, new BigNumber(balanceData.balance));
                     balanceData.share = share.payout;
 
                     //If they are blacklisted, keep their share
-                    if(this.config.blacklist.includes(addr)) {
+                    if (this.config.blacklist.includes(addr)) {
                         balanceData.share = new BigNumber(0);
                     }
                 }
@@ -264,8 +259,7 @@ module.exports = class TBW {
         if (this.forgedToday > this.config.numBlocks && !this.startBlock)
             this.forgedToday = this.config.numBlocks;
 
-        for (let i = this.sortedForgedBlocks.length - this.forgedToday; i < this.sortedForgedBlocks.length; i++)
-        {
+        for (let i = this.sortedForgedBlocks.length - this.forgedToday; i < this.sortedForgedBlocks.length; i++) {
             const block = this.sortedForgedBlocks[i];
             block.voterBalances.forEach((balanceData, addr) => {
                 const pay = payouts[addr] != null ? payouts[addr] : new BigNumber(0);
@@ -289,7 +283,7 @@ module.exports = class TBW {
             latestForgedBlock: this.sortedForgedBlocks[0]
         };
 
-        if(print)
+        if (print)
             console.log(payData.payouts);
 
         this.psql.close();
