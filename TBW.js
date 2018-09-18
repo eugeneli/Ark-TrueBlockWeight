@@ -123,7 +123,7 @@ module.exports = class TBW {
     };
 
     processBalances() {
-        const latestForgedBlock = this.sortedForgedBlocks[0];
+        const latestForgedBlock = this.sortedForgedBlocks[this.sortedForgedBlocks.length - 1];
         const timestampToday = latestForgedBlock.timestamp - this.config.nBlockTimePeriod; //Timestamp 24h ago
         const allVotersEver = new Set(this.voterAddrs);
         const currentVoters = new Set(this.voterAddrs);
@@ -280,7 +280,7 @@ module.exports = class TBW {
         const payData = {
             taxes: taxes,
             payouts: payouts,
-            latestForgedBlock: this.sortedForgedBlocks[0]
+            latestForgedBlock: this.sortedForgedBlocks[this.sortedForgedBlocks.length - 1]
         };
 
         if (print)
