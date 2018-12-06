@@ -7,39 +7,39 @@ exports.init = (publicKeyBytes, publicKeyString) => {
 };
 
 exports.getGeneratedBlocks = (numBlocks, startBlock) => {
-    return `SELECT blocks.height, blocks.timestamp, blocks."totalFee" \
-                FROM public.blocks \
-                WHERE blocks."generatorPublicKey" = '${publicKey}'\
-                AND blocks."height" >= ${startBlock ? startBlock : 1}\
-                ORDER BY blocks.height DESC \
+    return `SELECT height, timestamp, total_fee AS totalFee \
+    			FROM blocks
+				WHERE generator_public_key = '${pKey}' \
+                AND height >= ${startBlock ? startBlock : 1}\
+                ORDER BY height DESC \
                 LIMIT ${startBlock ? 'ALL' : numBlocks };`;
 };
 
 exports.getKeys = (delegate) => {
-    return `SELECT transactions."rawasset" \
-            FROM transactions \ 
-            WHERE id IN (SELECT delegates."transactionId" FROM delegates WHERE delegates."username" = '${delegate}') \
-            LIMIT 1;`;
+	return `SELECT CONCAT('{"delegate":{"username":"', username, '","publicKey":"', public_key, '"}}') AS rawasset \
+			FROM wallets \
+			WHERE username = '${delegate}' \
+			LIMIT 1;`;
 }
 
 exports.getVoterBalances = () => {
-    return `SELECT mem_accounts."balance", mem_accounts."address" \
-            FROM mem_accounts \
-            WHERE mem_accounts."balance" > 0 \
-            AND mem_accounts."address" in (SELECT mem_accounts2delegates."accountId" FROM public.mem_accounts2delegates WHERE mem_accounts2delegates."dependentId" = '${pKey}') \
-            ORDER BY mem_accounts."balance" DESC;`;
+    return `SELECT balance, address \
+            FROM wallets \
+            WHERE balance > 0 \
+            AND vote = '${pKey}' \
+            ORDER BY balance DESC;`;
 }
 
 exports.getRelevantTransactions = (addrs, timeStart, timeEnd) => {
     let joinedAddrs = addrs.map((addr) => `'${addr}'`).join(",");
 
-    let query = `SELECT transactions."id", transactions."amount", transactions."timestamp", transactions."recipientId", transactions."senderId", transactions."type", \
-                transactions."fee", transactions."rawasset", blocks."height" \
-                FROM transactions INNER JOIN blocks ON blocks."id" = transactions."blockId" \ 
-                WHERE transactions."timestamp" >= ${timeStart} \
-                AND transactions."timestamp" <= ${timeEnd} \
-                AND (transactions."senderId" in (${joinedAddrs}) \
-                OR transactions."recipientId" in (${joinedAddrs}))`
+	let query = `SELECT transactions.id, transactions.amount, transactions.timestamp, transactions.recipient_id AS "recipientId", wallets.address AS "senderId", transactions.type, transactions.fee, CASE WHEN transactions.type = 3 THEN CONCAT('{"votes":["', CASE WHEN SUBSTRING(ENCODE(serialized, 'hex'), 103, 2) = '01' THEN '+' ELSE '-' END, SUBSTRING(ENCODE(serialized, 'hex'), 105, 66), '"]}') ELSE NULL END AS rawasset, blocks.height \
+				FROM transactions INNER JOIN blocks ON blocks.id = transactions.block_id
+				INNER JOIN wallets ON wallets.public_key = transactions.sender_public_key
+                WHERE transactions.timestamp >= ${timeStart} \
+                AND transactions.timestamp <= ${timeEnd} \
+                AND (wallets.address in (${joinedAddrs}) \
+                OR transactions.recipient_id in (${joinedAddrs}))`
 
     return query;
 }
