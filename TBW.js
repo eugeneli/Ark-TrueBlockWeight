@@ -178,7 +178,7 @@ module.exports = class TBW {
 
                         // Apply votes
                         if (tx.type == 3 && JSON.parse(tx.rawasset).votes[0] == `-${this.pKey}`) {
-                            currentVoters.set(tx.senderId, true);
+                            currentVoters.add(tx.senderId, true);
                             this.sortedForgedBlocks[idx + 1].voterBalances.set(tx.senderId, {
                                 "balance": totalBalanceThusFar.get(tx.senderId),
                                 "share": 0
